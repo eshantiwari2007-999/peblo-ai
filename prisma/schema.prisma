@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  
+  // Relations
+  notes         Note[]
+  categories    Category[]
+  aiUsageLogs   AiUsageLog[]
+  activities    ActivityLog[]
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([email])
+}
+
+model Note {
+  id            String    @id @default(cuid())
+  title         String    @db.VarChar(255)
+  content       String    @db.Text
+  
+  // Metadata
+  isArchived    Boolean   @default(false)
+  isPublic      Boolean   @default(false)
+  // Cryptographically random token used in public share URLs.
+  // Never expose the internal `id` in a public URL — that enables enumeration.
+  shareToken    String?   @unique
+  
+  // AI Generated Content
+  summary       String?   @db.Text
+  actionItems   String[]  
+  
+  // Foreign Keys
+  userId        String
+  categoryId    String?
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags          Tag[]     @relation("NoteTags")
+  sharedNotes   SharedNote[]
+  activities    ActivityLog[]
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Indexes for performance
+  @@index([userId])
+  @@index([categoryId])
+  @@index([isPublic, isArchived])
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String    @db.VarChar(100)
+  
+  // Foreign Keys
+  userId        String
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes         Note[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // A user cannot have duplicate category names
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Tag {
+  id            String    @id @default(cuid())
+  name          String    @unique @db.VarChar(50)
+  
+  // Relations
+  notes         Note[]    @relation("NoteTags")
+
+  createdAt     DateTime  @default(now())
+}
+
+model SharedNote {
+  id            String    @id @default(cuid())
+  noteId        String
+  sharedWithEmail String? // Optional: if null, public link
+  accessLevel   AccessLevel @default(READ)
+  
+  // Relations
+  note          Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime? 
+
+  @@index([noteId])
+  @@index([sharedWithEmail])
+}
+
+enum AccessLevel {
+  READ
+  COMMENT
+  EDIT
+}
+
+model AiUsageLog {
+  id            String    @id @default(cuid())
+  userId        String
+  actionType    AiActionType
+  tokensUsed    Int       @default(0)
+  modelUsed     String    @default("gemini-1.5-flash")
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([actionType])
+  @@index([createdAt]) 
+}
+
+enum AiActionType {
+  GENERATE_SUMMARY
+  EXTRACT_ACTION_ITEMS
+  SUGGEST_TITLE
+  CHAT_ASSISTANT
+}
+
+model ActivityLog {
+  id            String    @id @default(cuid())
+  userId        String
+  noteId        String?
+  action        String    
+  metadata      Json?     
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note          Note?     @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([noteId])
+  @@index([createdAt]) 
+}
